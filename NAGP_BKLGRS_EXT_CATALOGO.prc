@@ -42,7 +42,8 @@ BEGIN
 
       LOOP
 
-        v_line := bs.IDPRODUTO||';'||
+        v_line := bs.COD_CATUNICO||';'||
+                  bs.IDPRODUTO||';'||
                   bs.IDFILIAL||';'||
                   bs.PRECO||';'||
                   bs.ESTOQUE||';'||
