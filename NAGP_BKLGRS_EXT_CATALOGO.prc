@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_CATALOGO IS
+CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_OFERTAS IS
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
@@ -16,13 +16,13 @@ BEGIN
       INTO v_Periodo
       FROM DUAL;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Catalogo_'||v_Periodo||'.csv', 'w', 32767);
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Ofertas_'||v_Periodo||'.csv', 'w', 32767);
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
       INTO v_Cabecalho
       FROM ALL_TAB_COLUMNS A
-     WHERE A.table_name = 'NAGV_BKLGRS_CATALOGO';
+     WHERE A.table_name = 'NAGV_BKLGRS_MENORPROMOCATIVA';
     -- Nao utiliza pq nao deu certo na variavel   
        /*    
     SELECT 'vda.'||LISTAGG(COLUMN_NAME,'||'||;||'||vda.') WITHIN GROUP (ORDER BY COLUMN_ID)
@@ -37,17 +37,20 @@ BEGIN
     -- Executa a query e escreve os resultados
 
       FOR bs IN (SELECT *                                           
-                    FROM NAGV_BKLGRS_CATALOGO 
+                    FROM NAGV_BKLGRS_MENORPROMOCATIVA 
                    WHERE 1=1)
 
       LOOP
 
-        v_line := bs.COD_CATUNICO||';'||
+        v_line := bs.CODUNICO||';'||
+                  bs.CODPROMOC||';'||
                   bs.IDPRODUTO||';'||
                   bs.IDFILIAL||';'||
-                  bs.PRECO||';'||
-                  bs.ESTOQUE||';'||
-                  bs.ISACTIVE;
+                  bs.DESCRIPTION||';'||
+                  bs.DTA_INICIO||';'||
+                  bs.DTA_FIM||';'||
+                  bs.ISACTIVE||';'||
+                  bs.PRECO_PROMOC;
                   
         v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer        
         
