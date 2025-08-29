@@ -37,14 +37,18 @@ BEGIN
     -- Executa a query e escreve os resultados
 
       FOR bs IN (SELECT *                                           
-                    FROM NAGV_BKLGRS_PESSOA 
-                   WHERE 1=1)
+                    FROM NAGV_BKLGRS_PESSOA X
+                   WHERE 1=1
+                     AND CPF != '00000000000'
+                     AND X.Email LIKE '%@%')
 
       LOOP
  
         v_line :=  bs.ID_NAGUMO||';'||
                    bs.CPF||';'||
-                   bs.NAME||';'||
+                   bs.first_name||';'||
+                   bs.middle_name||';'||
+                   bs.last_name||';'||
                    bs.DATA_CADASTRO||';'||
                    bs.sexo||';'||
                    bs.DATA_NASCIMENTO||';'||
@@ -87,6 +91,11 @@ EXCEPTION
         IF UTL_FILE.is_open(v_file) THEN
             UTL_FILE.fclose(v_file);
         END IF;
+        DBMS_OUTPUT.PUT_LINE('Error Code: ' || SQLCODE);
+        DBMS_OUTPUT.PUT_LINE('Error Message: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('Error Stack: ' || DBMS_UTILITY.FORMAT_ERROR_STACK);
+        DBMS_OUTPUT.PUT_LINE('Error Backtrace: ' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE);
+        DBMS_OUTPUT.PUT_LINE('Call Stack: ' || DBMS_UTILITY.FORMAT_CALL_STACK);
         RAISE;
 
 END;
