@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFinal DATE) IS
+CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFinal DATE, psTipoAgrup VARCHAR2) IS
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
@@ -7,17 +7,28 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFina
     v_Cabecalho VARCHAR2(4000);
     v_Periodo VARCHAR2(10);
     v_buffer CLOB;
-    v_chunk_size CONSTANT PLS_INTEGER := 32000; -- Ajuste conforme necessário
+    v_chunk_size CONSTANT PLS_INTEGER := 32000;
+    v_varcsv VARCHAR2(400);
+    v_dtini DATE;
+    v_dtfim DATE;
 
 BEGIN
-
-    FOR t IN (SELECT X.DTA
+    -- Trata o agrupamento do arquivo
+    FOR t IN (SELECT DISTINCT CASE WHEN psTipoAgrup = 'F' THEN 'Full' 
+                                   WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
+                                   WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
+                                   WHEN psTipoAgrup = 'A' THEN ANO
+                               END agrup_arq
                 FROM DIM_TEMPO X
                WHERE X.DTA BETWEEN vsDtaInicial AND vsDtaFinal)
-
+    
     LOOP
     /* A tabela abaixo irá agrupar os CPFs/CNPJs para serem utilizados na view que gera os arquivos */
     BEGIN
+      
+      v_dtini  := vsDtaInicial;
+      v_dtfim  := vsDtaFinal;
+      v_varcsv := t.agrup_arq;
       
     DELETE FROM NAGT_TMP_BKLGRS WHERE 1=1;
     COMMIT;
@@ -34,11 +45,8 @@ BEGIN
                               INNER JOIN PDV_DESCONTO Z ON (Z.SEQDOCTO = Y.SEQDOCTO)
                                LEFT JOIN MAD_PEDVENDA P ON P.NROPEDVENDA = X.NROPEDIDOVENDA
                              
-    WHERE X.DTAMOVIMENTO = t.DTA
-      AND EXISTS (SELECT 1
-                     FROM NAGV_BASE_CGO_FINALIDADE PD
-                    WHERE PD.TIPO = 'V'
-                      AND PD.CGO_LIST = X.CODGERALOPER)
+    WHERE X.DTAMOVIMENTO BETWEEN v_dtini AND v_dtfim
+      AND X.CODGERALOPER IN (37,48,123,610,615,613,810,916,910,911,76)
     
     UNION
     /* Cupom PDV TOTVS */
@@ -47,32 +55,24 @@ BEGIN
       FROM MFL_DOCTOFISCAL X  INNER JOIN MFL_DOCTOFIDELIDADE XDF ON XDF.SEQNF = X.SEQNF
                                LEFT JOIN MAD_PEDVENDA P ON P.NROPEDVENDA = X.NROPEDIDOVENDA
                               
-    WHERE X.DTAMOVIMENTO = t.DTA
-      AND EXISTS (SELECT 1
-                     FROM NAGV_BASE_CGO_FINALIDADE PD
-                    WHERE PD.TIPO = 'V'
-                      AND PD.CGO_LIST = X.CODGERALOPER)
+    WHERE X.DTAMOVIMENTO BETWEEN v_dtini AND v_dtfim
+      AND X.CODGERALOPER IN (37,48,123,610,615,613,810,916,910,911,76)
     
     UNION
     /* Notas sem cupom */
-    SELECT TO_NUMBER(G.NROCGCCPF||G.DIGCGCCPF) CPF, X.SEQNF, X.NROEMPRESA, X.DTAMOVIMENTO, PEDIDOID
+    SELECT TO_NUMBER(G.NROCGCCPF||LPAD(G.DIGCGCCPF,2,0)) CPF, X.SEQNF, X.NROEMPRESA, X.DTAMOVIMENTO, PEDIDOID
       FROM MFL_DOCTOFISCAL X INNER JOIN GE_PESSOA G ON G.SEQPESSOA = X.SEQPESSOA
                              INNER JOIN MAD_PEDVENDA P ON P.NROPEDVENDA = X.NROPEDIDOVENDA AND P.NROEMPRESA = X.NROEMPRESA
       
-     WHERE X.DTAMOVIMENTO = t.DTA
-       AND EXISTS (SELECT 1
-                     FROM NAGV_BASE_CGO_FINALIDADE PD
-                    WHERE PD.TIPO = 'V'
-                      AND PD.CGO_LIST = X.CODGERALOPER);
+     WHERE X.DTAMOVIMENTO BETWEEN v_dtini AND v_dtfim
+       AND X.CODGERALOPER IN (37,48,123,610,615,613,810,916,910,911,76);
                        
     COMMIT;
         
     END;
 
-    V_Periodo := REPLACE(TO_CHAR(t.Dta, 'DD/MM/YYYY'), '/','_');
-
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('PLUSOFT', 'Ext_Bklgrs_Vendas_'||v_Periodo||'.csv', 'w', 32767); 
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Vendas_'||v_varcsv||'.csv', 'w', 32767); 
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
    SELECT 'IDUNICO;'||LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)-- ||';DATA'
@@ -88,7 +88,8 @@ BEGIN
 
       FOR vda IN (SELECT /*+OPTIMIZER_FEATURES_ENABLE('11.2.0.4')*/
                   IDCUPOM||ROW_NUMBER() OVER(PARTITION BY IDCUPOM ORDER BY IDCUPOM, IDPRODUTO, NUMQTDVENDIDA) IDUNICO,
-                  A.IDPESSOA,
+                  CASE WHEN LENGTH(A.IDPESSOA) <= 11 THEN LPAD(A.IDPESSOA,11,0)
+                       ELSE LPAD(A.IDPESSOA,14,0) END IDPESSOA,
                   A.IDFILIAL,
                   A.IDCUPOM,
                   A.IDPRODUTO,
@@ -101,7 +102,7 @@ BEGIN
                   A.TXTCANALVENDAS,
                   A.TXTFORMAPAGTO,
                   A.NROCUPOM FROM NAGV_BKLGRS_VENDAS A
-                            WHERE a.DATA = t.DTA)
+                            WHERE a.DATA BETWEEN v_dtini AND v_dtfim)
 
       LOOP
 
@@ -136,6 +137,5 @@ EXCEPTION
         IF UTL_FILE.is_open(v_file) THEN
             UTL_FILE.fclose(v_file);
         END IF;
-        RAISE;
 
 END;
