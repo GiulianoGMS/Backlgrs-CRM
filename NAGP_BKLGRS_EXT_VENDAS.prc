@@ -2,10 +2,7 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFina
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
-    v_Targetcharset varchar2(40 BYTE);
-    v_Dbcharset varchar2(40 BYTE);
     v_Cabecalho VARCHAR2(4000);
-    v_Periodo VARCHAR2(10);
     v_buffer CLOB;
     v_chunk_size CONSTANT PLS_INTEGER := 32000;
     v_varcsv VARCHAR2(400);
@@ -18,18 +15,26 @@ BEGIN
                                    WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
                                    WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
                                    WHEN psTipoAgrup = 'A' THEN ANO
-                               END agrup_arq
+                               END agrup_arq, MIN(DTA) dtamin, MAX(DTA) dtamax
                 FROM DIM_TEMPO X
-               WHERE X.DTA BETWEEN vsDtaInicial AND vsDtaFinal)
+               WHERE X.DTA BETWEEN vsDtaInicial AND vsDtaFinal
+               GROUP BY CASE WHEN psTipoAgrup = 'F' THEN 'Full' 
+                                   WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
+                                   WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
+                                   WHEN psTipoAgrup = 'A' THEN ANO
+                               END 
+               ORDER BY 2)
     
     LOOP
-    /* A tabela abaixo irá agrupar os CPFs/CNPJs para serem utilizados na view que gera os arquivos */
+    
     BEGIN
-      
-      v_dtini  := vsDtaInicial;
-      v_dtfim  := vsDtaFinal;
+    -- Recebe as variaveis de Data e Nome do Agrupamento pra inserir no tit do arquivo
+      v_dtini  := t.dtamin;
+      v_dtfim  := t.dtamax;
       v_varcsv := t.agrup_arq;
-      
+    
+    /* A tabela abaixo irá agrupar os CPFs/CNPJs para serem utilizados na view que gera os arquivos */
+    
     DELETE FROM NAGT_TMP_BKLGRS WHERE 1=1;
     COMMIT;
       
