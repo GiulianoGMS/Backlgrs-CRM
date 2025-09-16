@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_PRODUTO IS
+CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_PRODUTO (psTipoAgrup VARCHAR2) IS
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
@@ -9,20 +9,28 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_PRODUTO IS
     v_Periodo VARCHAR2(10);
     v_buffer CLOB;
     v_chunk_size CONSTANT PLS_INTEGER := 32000; -- Ajuste conforme necessário
+    v_tipoagrup VARCHAR2(30);
 
 BEGIN
   
-    SELECT REPLACE(TO_CHAR(SYSDATE-1, 'DD/MM/YYYY'),'/','_') 
+    SELECT REPLACE(TO_CHAR(SYSDATE, 'DD/MM/YYYY'),'/','_') 
       INTO v_Periodo
       FROM DUAL;
+      
+    IF psTipoAgrup = 'F' THEN
+       v_tipoagrup := 'Full';
+    ELSE
+       v_tipoagrup := v_Periodo;
+    END IF;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Produto_Full.csv', 'w', 32767);
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Produto_'||v_Periodo||'.csv', 'w', 32767);
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
       INTO v_Cabecalho
       FROM ALL_TAB_COLUMNS A
-     WHERE A.table_name = 'NAGV_BKLGRS_PRODUTO';
+     WHERE A.table_name = 'NAGV_BKLGRS_PRODUTO'
+       AND COLUMN_NAME != 'DTA_ALT';
     -- Nao utiliza pq nao deu certo na variavel   
        /*    
     SELECT 'vda.'||LISTAGG(COLUMN_NAME,'||vda.') WITHIN GROUP (ORDER BY COLUMN_ID)
@@ -37,8 +45,9 @@ BEGIN
     -- Executa a query e escreve os resultados
 
       FOR bs IN (SELECT *                                           
-                    FROM NAGV_BKLGRS_PRODUTO X
+                    FROM NAGV_BKLGRS_PRODUTO_v2 X
                    WHERE 1=1
+                     AND TRUNC(DTA_ALT) = CASE WHEN psTipoAgrup = 'F' THEN TRUNC(DTA_ALT) ELSE TRUNC(SYSDATE) -1 END
                  )
 
       LOOP
@@ -47,20 +56,19 @@ BEGIN
                 bs.DESCRICAOCOMPLETA||';'||
                 bs.DESCRICAORESUMIDA||';'||
                 bs.UNIDADE||';'||
-                bs.DEPTO||';'||
                 bs.CATEGORIA||';'||
                 bs.GRUPO||';'||
                 bs.SUBGRUPO||';'||
                 bs.MARCA||';'||
                 bs.MARCAPROPRIA||';'||
-                bs.PORDUTOSAZONAL||';'||
+                bs.PRODUTOSAZONAL||';'||
                 bs.IDMATERIALPAI||';'||
                 bs.DESCRICAOMATERIALPAI||';'||
                 bs.IDFORNECEDOR||';'||
                 bs.NOMEFORNECEDOR||';'||
                 bs.EAN||';'||
                 bs.DESC_HUMANIZADA||';'||
-                bs.IND_INTEGRA_ECOMM;
+                bs.IND_INTEGRA_ECOMM;--||';'||bs.URL;
               
       v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer        
         
