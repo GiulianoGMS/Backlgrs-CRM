@@ -13,6 +13,7 @@ BEGIN
     -- Trata o agrupamento do arquivo
     FOR t IN (SELECT DISTINCT CASE WHEN psTipoAgrup = 'F' THEN 'Full' 
                                    WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
+                                   WHEN psTipoAgrup = 'S' THEN 'S'||SEMANA||'_'||MES||'_'||ANO
                                    WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
                                    WHEN psTipoAgrup = 'A' THEN ANO
                                END agrup_arq, MIN(DTA) dtamin, MAX(DTA) dtamax
@@ -20,6 +21,7 @@ BEGIN
                WHERE X.DTA BETWEEN vsDtaInicial AND vsDtaFinal
                GROUP BY CASE WHEN psTipoAgrup = 'F' THEN 'Full' 
                                    WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
+                                   WHEN psTipoAgrup = 'S' THEN 'S'||SEMANA||'_'||MES||'_'||ANO
                                    WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
                                    WHEN psTipoAgrup = 'A' THEN ANO
                                END 
