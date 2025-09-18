@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_FILIAL IS
+CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_FILIAL (psTipoAgrup VARCHAR2) IS
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
@@ -9,20 +9,39 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_FILIAL IS
     v_Periodo VARCHAR2(10);
     v_buffer CLOB;
     v_chunk_size CONSTANT PLS_INTEGER := 32000; -- Ajuste conforme necessário
+    v_tipoagrup VARCHAR2(30);
+    v_qtd       NUMBER(10);
 
 BEGIN
   
-    SELECT REPLACE(TO_CHAR(SYSDATE -1, 'DD/MM'),'/','_') 
+    SELECT REPLACE(TO_CHAR(SYSDATE, 'DD/MM/YYYY'),'/','_') 
       INTO v_Periodo
       FROM DUAL;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Filial_Full.csv', 'w', 32767);
+    IF psTipoAgrup = 'F' THEN
+       v_tipoagrup := 'Full';
+    ELSE
+       v_tipoagrup := v_Periodo;
+    END IF;
+    
+    -- Valida se houve insercao de nova loja no d-1
+    -- caso o tipo de geracao seja parcial e nao houver nova loja, nao gerar vazio
+    
+    SELECT COUNT(1) 
+      INTO v_qtd
+      FROM NAGV_BKLGRS_FILIAL T
+     WHERE T.DATA_CAD = TRUNC(SYSDATE) -1;
+     
+    IF psTipoAgrup = 'F' OR psTipoAgrup != 'F' AND v_qtd > 0 THEN
+    
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Filial_'||v_tipoagrup||'.csv', 'w', 32767);
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
       INTO v_Cabecalho
       FROM ALL_TAB_COLUMNS A
-     WHERE A.table_name = 'NAGV_BKLGRS_FILIAL';
+     WHERE A.table_name = 'NAGV_BKLGRS_FILIAL'
+       AND A.column_name != 'DATA_CAD';
     -- Nao utiliza pq nao deu certo na variavel   
        /*    
     SELECT 'vda.'||LISTAGG(COLUMN_NAME,';vda.') WITHIN GROUP (ORDER BY COLUMN_ID)
@@ -38,13 +57,13 @@ BEGIN
 
       FOR bs IN (SELECT *                                           
                     FROM NAGV_BKLGRS_FILIAL 
-                   WHERE 1=1)
+                   WHERE 1=1
+                     AND DATA_CAD =  CASE WHEN psTipoAgrup = 'F' THEN DATA_CAD ELSE TRUNC(SYSDATE) -1 END)
 
       LOOP
  
         v_line := bs.IDFILIAL||';'||
                   bs.NOMEFANTASIA||';'||
-                  bs.DATABERTURA||';'||
                   bs.TIPOLOGRADOURO||';'||
                   bs.LOGRADOURO||';'||
                   bs.NUMNUMERO||';'||
@@ -84,6 +103,8 @@ BEGIN
     
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
+    
+    END IF;
 
 COMMIT;
 EXCEPTION
