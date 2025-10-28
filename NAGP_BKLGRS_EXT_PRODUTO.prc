@@ -19,17 +19,19 @@ BEGIN
       
     IF psTipoAgrup = 'F' THEN
        v_tipoagrup := 'Full';
+    ELSIF psTipoAgrup = 'I' THEN
+       v_tipoagrup := 'Incremental';
     ELSE
        v_tipoagrup := v_Periodo;
     END IF;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Produto_'||v_Periodo||'.csv', 'w', 32767);
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Produto_'||v_tipoagrup||'.csv', 'w', 32767);
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
       INTO v_Cabecalho
       FROM ALL_TAB_COLUMNS A
-     WHERE A.table_name = 'NAGV_BKLGRS_PRODUTO'
+     WHERE A.table_name = 'NAGV_BKLGRS_PRODUTO_V2'
        AND COLUMN_NAME != 'DTA_ALT';
     -- Nao utiliza pq nao deu certo na variavel   
        /*    
@@ -68,7 +70,7 @@ BEGIN
                 bs.NOMEFORNECEDOR||';'||
                 bs.EAN||';'||
                 bs.DESC_HUMANIZADA||';'||
-                bs.IND_INTEGRA_ECOMM;--||';'||bs.URL;
+                bs.IND_INTEGRA_ECOMM||';'||bs.URL||';'||bs.IND_UTIL_PROD;
               
       v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer        
         
