@@ -13,16 +13,23 @@ SELECT X.SEQPRODUTO IDPRODUTO,
        B.DESCCOMPLETA DESCRICAOMATERIALPAI,
        SEQFORNECEDOR IDFORNECEDOR,
        NOMERAZAO NOMEFORNECEDOR,
-       PC.CODACESSO EAN,
-       REPLACE(REPLACE(X.NOMEPRODUTOECOMM,CHR(13), ''), CHR(10), '') DESC_HUMANIZADA,
+       FBUSCA_EAN_MAX(X.SEQPRODUTO) EAN,
+       REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(X.DESCECOMMERCE,X.NOMEPRODUTOECOMM,INITCAP(REPLACE(X.DESCCOMPLETA, 'Ç','C'))), ''),';',' '), ';',' '), CHR(13), ''), CHR(10)) DESC_HUMANIZADA,
+       REPLACE(REPLACE(NVL(X.NOMEPRODUTOECOMM,INITCAP(REGEXP_REPLACE(REPLACE(X.DESCCOMPLETA, 'Ç','C'), '[^A-Za-z0-9]', ' '))),CHR(13), ''), CHR(10), '') NOMEPRODUTOECOMM,
        CASE WHEN NVL(X.INDINTEGRAECOMMERCE,'N') = 'S' THEN 'TRUE' ELSE 'FALSE' END IND_INTEGRA_ECOMM,
-         'https://assetsmn.s3.us-east-1.amazonaws.com/assets/ofertas/'||X.SEQPRODUTO||'.jpg' URL,
+         'https://assetsmn.s3.us-east-1.amazonaws.com/assets/ofertas-ecommerce/'||X.SEQPRODUTO||'.webp' URL, ---- Solicitação do "Cabeça Nave Mãe" alterado para "ofertas-ecommerce" em 30/10/2025 por Cipolla
        GREATEST(NVL(X.DTAHORINCLUSAO,     SYSDATE - 7), -- Data de Inclusao
                 NVL(X.DTAHORALTERACAO,    SYSDATE - 7), -- Data de Alteracao do Prod
-                NVL(F.DTAHORALTERACAO,    SYSDATE - 7), -- Data de Alteracao na Familia
-                NVL(PC.DATAHORAALTERACAO, SYSDATE - 7)  -- Data de Alteracao no Codigo (EAN)
+                NVL(F.DTAHORALTERACAO,    SYSDATE - 7)-- -- Data de Alteracao na Familia
+             --   NVL(PC.DATAHORAALTERACAO, SYSDATE - 7)  -- Data de Alteracao no Codigo (EAN)
                 )
-                DTA_ALT
+                DTA_ALT,
+        -- Adicionado indicador de produtos conf integracao com instaleap
+        -- Por Cipolla em fev/25 a pedido do Roger e  Kogut
+        CASE WHEN EXISTS (SELECT 1 FROM NAGV_IEAP_REGRA_PRODUTOS W WHERE W.seqproduto = X.SEQPRODUTO)
+        -- Removido Giuliano em 14/10/2025 - Solic Giovana via email)  -- Removendo ROTISSERIE - Solic Roger via Teams / Giuliano / 24/03/25
+              AND NOT EXISTS(SELECT 2 FROM ETLV_CATEGORIA CT WHERE CT.SEQFAMILIA = X.SEQFAMILIA AND CT.SEQCATEGORIAN1  IN (40054,46156,46811,31515))
+        THEN 'TRUE' ELSE 'FALSE' END IND_UTIL_PROD
 
   FROM MAP_PRODUTO X INNER JOIN DIM_CATEGORIA@CONSINCODW C ON C.SEQFAMILIA = X.SEQFAMILIA
                      INNER JOIN MAP_FAMILIA F ON F.SEQFAMILIA = X.SEQFAMILIA
@@ -31,5 +38,5 @@ SELECT X.SEQPRODUTO IDPRODUTO,
                      INNER JOIN GE_PESSOA G ON G.SEQPESSOA = Z.SEQFORNECEDOR
                       LEFT JOIN MAP_PRODUTO B ON B.SEQPRODUTO = X.SEQPRODUTOBASE
                      INNER JOIN MAP_FAMDIVISAO FD ON FD.SEQFAMILIA = X.SEQFAMILIA
-                      LEFT JOIN MAP_PRODCODIGO PC ON PC.SEQPRODUTO = X.SEQPRODUTO AND PC.TIPCODIGO = 'E' AND PC.INDUTILVENDA = 'S'
+                   --  LEFT JOIN MAP_PRODCODIGO PC ON PC.SEQPRODUTO = X.SEQPRODUTO AND PC.TIPCODIGO = 'E' AND PC.INDUTILVENDA = 'S'
 ;
