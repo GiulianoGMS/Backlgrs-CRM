@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_OFERTAS IS
+CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_CATALOGO (psTipoAgrup VARCHAR2) IS
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
@@ -9,20 +9,30 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_OFERTAS IS
     v_Periodo VARCHAR2(10);
     v_buffer CLOB;
     v_chunk_size CONSTANT PLS_INTEGER := 32000; -- Ajuste conforme necessário
+    v_tipoagrup VARCHAR2(30);
 
 BEGIN
   
-    SELECT REPLACE(TO_CHAR(SYSDATE, 'DD/MM'),'/','_') 
+    SELECT REPLACE(TO_CHAR(SYSDATE, 'DD/MM/YYYY'),'/','_') 
       INTO v_Periodo
       FROM DUAL;
+      
+    IF psTipoAgrup = 'F' THEN
+       v_tipoagrup := 'Full';
+    ELSIF psTipoAgrup = 'I' OR psTipoAgrup = 'A' THEN
+       v_tipoagrup := 'Incremental';
+    ELSE
+       v_tipoagrup := v_Periodo;
+    END IF;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Ofertas_'||v_Periodo||'.csv', 'w', 32767);
+    v_file := UTL_FILE.fopen(CASE WHEN psTipoAgrup = 'A' THEN 'BACKLGRS_ALT' ELSE 'BACKLGRS' END, 'Ext_Bklgrs_Catalogo_'||v_tipoagrup||'.csv', 'w', 32767);
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
       INTO v_Cabecalho
       FROM ALL_TAB_COLUMNS A
-     WHERE A.table_name = 'NAGV_BKLGRS_MENORPROMOCATIVA';
+     WHERE A.table_name = 'NAGV_BKLGRS_CATALOGO'
+       AND COLUMN_NAME != 'DT_ULTIMA_ALTERACAO';
     -- Nao utiliza pq nao deu certo na variavel   
        /*    
     SELECT 'vda.'||LISTAGG(COLUMN_NAME,'||'||;||'||vda.') WITHIN GROUP (ORDER BY COLUMN_ID)
@@ -37,20 +47,18 @@ BEGIN
     -- Executa a query e escreve os resultados
 
       FOR bs IN (SELECT *                                           
-                    FROM NAGV_BKLGRS_MENORPROMOCATIVA 
-                   WHERE 1=1)
+                    FROM NAGV_BKLGRS_CATALOGO 
+                   WHERE 1=1
+                     AND TRUNC(DT_ULTIMA_ALTERACAO) = CASE WHEN psTipoAgrup = 'F' THEN TRUNC(DT_ULTIMA_ALTERACAO) ELSE TRUNC(SYSDATE) END )
 
       LOOP
 
-        v_line := bs.CODUNICO||';'||
-                  bs.CODPROMOC||';'||
+        v_line := bs.COD_CATUNICO||';'||
                   bs.IDPRODUTO||';'||
                   bs.IDFILIAL||';'||
-                  bs.DESCRIPTION||';'||
-                  bs.DTA_INICIO||';'||
-                  bs.DTA_FIM||';'||
-                  bs.ISACTIVE||';'||
-                  bs.PRECO_PROMOC;
+                  bs.PRECO||';'||
+                  bs.ESTOQUE||';'||
+                  bs.ISACTIVE||';'||bs.PERPETUO;
                   
         v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer        
         
@@ -71,7 +79,6 @@ BEGIN
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
 
-COMMIT;
 EXCEPTION
 
     WHEN OTHERS THEN
