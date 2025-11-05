@@ -19,13 +19,15 @@ BEGIN
       
     IF psTipoAgrup = 'F' THEN
        v_tipoagrup := 'Full';
-    ELSIF psTipoAgrup = 'I' OR psTipoAgrup = 'A' THEN
+    ELSIF psTipoAgrup = 'I' THEN
        v_tipoagrup := 'Incremental';
+    ELSIF psTipoAgrup = 'A' THEN
+       v_tipoagrup := 'Atualizacao';
     ELSE
        v_tipoagrup := v_Periodo;
     END IF;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen(CASE WHEN psTipoAgrup = 'A' THEN 'BACKLGRS_ALT' ELSE 'BACKLGRS' END, 'Ext_Bklgrs_Catalogo_'||v_tipoagrup||'.csv', 'w', 32767);
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Catalogo_'||v_tipoagrup||'.csv', 'w', 32767);
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
@@ -49,7 +51,7 @@ BEGIN
       FOR bs IN (SELECT *                                           
                     FROM NAGV_BKLGRS_CATALOGO 
                    WHERE 1=1
-                     AND TRUNC(DT_ULTIMA_ALTERACAO) = CASE WHEN psTipoAgrup = 'F' THEN TRUNC(DT_ULTIMA_ALTERACAO) ELSE TRUNC(SYSDATE) END )
+                     AND TRUNC(DT_ULTIMA_ALTERACAO) = CASE WHEN psTipoAgrup IN ('F','I') THEN TRUNC(DT_ULTIMA_ALTERACAO) ELSE TRUNC(SYSDATE) END )
 
       LOOP
 
