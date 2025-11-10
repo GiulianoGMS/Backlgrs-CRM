@@ -10,6 +10,7 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_CATALOGO (psTipoAgrup VARCHAR2) IS
     v_buffer CLOB;
     v_chunk_size CONSTANT PLS_INTEGER := 32000; -- Ajuste conforme necessário
     v_tipoagrup VARCHAR2(30);
+    v_name VARCHAR2(300);
 
 BEGIN
   
@@ -27,7 +28,8 @@ BEGIN
        v_tipoagrup := v_Periodo;
     END IF;
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Catalogo_'||v_tipoagrup||'.csv', 'w', 32767);
+    v_file := UTL_FILE.fopen('BACKLGRS_GENERATING', 'Ext_Bklgrs_Catalogo_'||v_tipoagrup||'.csv', 'w', 32767);
+    v_name := 'Ext_Bklgrs_Catalogo_'||v_tipoagrup||'.csv';
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
     SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)
@@ -80,7 +82,15 @@ BEGIN
     
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
-
+    
+    -- Move do diretório temporário para o final
+     sys.utl_file.fcopy('BACKLGRS_GENERATING',
+                       v_name,
+                       'BACKLGRS',
+                       v_name,1,NULL);
+     sys.utl_file.FClose(v_file); 
+     sys.utl_file.fremove('BACKLGRS_GENERATING', v_name);
+    
 EXCEPTION
 
     WHEN OTHERS THEN
