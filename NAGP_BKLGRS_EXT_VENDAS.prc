@@ -12,7 +12,7 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFina
 BEGIN
     -- Trata o agrupamento do arquivo
     FOR t IN (SELECT DISTINCT CASE WHEN psTipoAgrup = 'F' THEN 'Full' 
-                                   WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
+                                   WHEN psTipoAgrup IN ('D','I') THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
                                    WHEN psTipoAgrup = 'S' THEN 'S'||SEMANA||'_'||MES||'_'||ANO
                                    WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
                                    WHEN psTipoAgrup = 'A' THEN ANO
@@ -20,7 +20,7 @@ BEGIN
                 FROM DIM_TEMPO X
                WHERE X.DTA BETWEEN vsDtaInicial AND vsDtaFinal
                GROUP BY CASE WHEN psTipoAgrup = 'F' THEN 'Full' 
-                                   WHEN psTipoAgrup = 'D' THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
+                                   WHEN psTipoAgrup IN ('D','I') THEN REPLACE(TO_CHAR(X.DTA, 'DD/MM/YYYY'), '/','_') 
                                    WHEN psTipoAgrup = 'S' THEN 'S'||SEMANA||'_'||MES||'_'||ANO
                                    WHEN psTipoAgrup = 'M' THEN MES||'_'||ANO
                                    WHEN psTipoAgrup = 'A' THEN ANO
@@ -34,6 +34,10 @@ BEGIN
       v_dtini  := t.dtamin;
       v_dtfim  := t.dtamax;
       v_varcsv := t.agrup_arq;
+      
+      IF psTipoAgrup = 'I' THEN
+         v_varcsv := 'Incremental';
+      END IF;
     
     /* A tabela abaixo irá agrupar os CPFs/CNPJs para serem utilizados na view que gera os arquivos */
     
@@ -77,7 +81,8 @@ BEGIN
     COMMIT;
         
     END;
-
+    
+    -- Primeiro extrai a venda aberta depois agrupada
     -- Abre o arquivo para escrita
     v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Vendas_'||v_varcsv||'.csv', 'w', 32767); 
 
@@ -117,7 +122,50 @@ BEGIN
                   vda.VLRPRECOVENDAUNITARIO||';'||vda.VLRDESCONTOUNITARIO||';'||vda.VLRMARGEMPDV||';'||
                   vda.TXTCANALVENDAS||';'||vda.TXTFORMAPAGTO||';'||vda.NROCUPOM;
 
-        v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer
+        v_buffer := v_buffer || v_line || CHR(13); -- Adiciona nova linha ao buffer
+        
+        IF LENGTH(v_buffer) > v_chunk_size THEN
+            UTL_FILE.put_line(v_file, v_buffer); -- Escreve o buffer no arquivo
+            v_buffer := ''; -- Limpe o buffer
+            
+        END IF;
+        
+    END LOOP;
+    
+    -- Grava o restante do buffer no final (burro esqueceu)
+    IF v_buffer IS NOT NULL THEN
+        UTL_FILE.put_line(v_file, v_buffer);
+        v_buffer := '';
+    END IF;
+    
+    -- Fecha o arquivo
+    UTL_FILE.fclose(v_file);
+    
+    -- Segunda extracao - agrupada
+    -- Abre o arquivo para escrita
+    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_VendasAgrup_'||v_varcsv||'.csv', 'w', 32767); 
+
+    -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
+   SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)-- ||';DATA'
+      INTO v_Cabecalho
+      FROM ALL_TAB_COLUMNS A
+     WHERE A.table_name = 'NAGV_BKLGRS_VENDAS_AGRUP'
+       AND COLUMN_NAME NOT IN ('TXTTIPOVENDA', 'DATA');
+
+    -- Escreve o cabe¿alho do CSV
+    UTL_FILE.put_line(v_file, v_Cabecalho);
+
+    -- Executa a query e escreve os resultados
+
+      FOR vda IN (SELECT /*+OPTIMIZER_FEATURES_ENABLE('11.2.0.4')*/
+                  IDPESSOA, IDFILIAL, IDCUPOM, DATA_COMPLETA, DATA, VALORTOTAL, VALORDESC, VALORLIQ, TXTCANALVENDAS, TXTFORMAPAGTO, NROCHECKOUT, BUSINESS_UNIT, QTD_TOT_VENDA FROM NAGV_BKLGRS_VENDAS_AGRUP A
+                            WHERE a.DATA BETWEEN v_dtini AND v_dtfim)
+
+      LOOP
+
+        v_line := vda.IDPESSOA||';'||vda.IDFILIAL||';'||vda.IDCUPOM||';'||vda.DATA_COMPLETA||';'||vda.VALORTOTAL||';'||vda.VALORDESC||';'||vda.VALORLIQ||';'||vda.TXTCANALVENDAS||';'||vda.TXTFORMAPAGTO||';'||vda.NROCHECKOUT||';'||vda.BUSINESS_UNIT||';'||vda.QTD_TOT_VENDA;
+
+        v_buffer := v_buffer || v_line || CHR(13); -- Adiciona nova linha ao buffer
         
         IF LENGTH(v_buffer) > v_chunk_size THEN
             UTL_FILE.put_line(v_file, v_buffer); -- Escreve o buffer no arquivo
