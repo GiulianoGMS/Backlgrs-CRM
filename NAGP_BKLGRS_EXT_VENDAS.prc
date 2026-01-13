@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFinal DATE, psTipoAgrup VARCHAR2) IS
+CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFinal DATE, psTipoAgrup VARCHAR2, psTipoExt VARCHAR2) IS
 
     v_file UTL_FILE.file_type;
     v_line VARCHAR2(32767);
@@ -8,6 +8,8 @@ CREATE OR REPLACE PROCEDURE NAGP_BKLGRS_EXT_VENDAS (vsDtaInicial DATE, vsDtaFina
     v_varcsv VARCHAR2(400);
     v_dtini DATE;
     v_dtfim DATE;
+    v_dir   VARCHAR2(4000);
+    v_name  VARCHAR2(3000);
 
 BEGIN
     -- Trata o agrupamento do arquivo
@@ -37,6 +39,9 @@ BEGIN
       
       IF psTipoAgrup = 'I' THEN
          v_varcsv := 'Incremental';
+         v_dir    := 'BACKLGRS';
+      ELSE
+         v_dir := 'BACKLGRS_GENERATING';
       END IF;
     
     /* A tabela abaixo irá agrupar os CPFs/CNPJs para serem utilizados na view que gera os arquivos */
@@ -82,9 +87,11 @@ BEGIN
         
     END;
     
+    IF psTipoExt IN ('T','I') THEN
+    
     -- Primeiro extrai a venda aberta depois agrupada
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_Vendas_'||v_varcsv||'.csv', 'w', 32767); 
+    v_file := UTL_FILE.fopen(v_dir, 'Ext_Bklgrs_Vendas_'||v_varcsv||'.csv', 'w', 32767); 
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
    SELECT 'IDUNICO;'||LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)-- ||';DATA'
@@ -141,9 +148,13 @@ BEGIN
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
     
+    END IF;
+    IF psTipoExt IN ('T','G') THEN
+    
     -- Segunda extracao - agrupada
     -- Abre o arquivo para escrita
-    v_file := UTL_FILE.fopen('BACKLGRS', 'Ext_Bklgrs_VendasAgrup_'||v_varcsv||'.csv', 'w', 32767); 
+    v_file := UTL_FILE.fopen(v_dir, 'Ext_Bklgrs_VendasAgrup_'||v_varcsv||'.csv', 'w', 32767); 
+    v_name := 'Ext_Bklgrs_VendasAgrup_'||v_varcsv||'.csv';
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
    SELECT LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)-- ||';DATA'
@@ -183,7 +194,19 @@ BEGIN
     
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
-
+    
+    IF v_dir = 'BACKLGRS_GENERATING' THEN
+    
+    -- Move do diretório temporário para o final
+     sys.utl_file.fcopy('BACKLGRS_GENERATING',
+                       v_name, 
+                       'BACKLGRS',
+                       v_name,1,NULL);
+     sys.utl_file.FClose(v_file); 
+     sys.utl_file.fremove('BACKLGRS_GENERATING', v_name);
+     
+    END IF;
+    END IF;
     END LOOP;
 
 EXCEPTION
