@@ -39,7 +39,7 @@ BEGIN
       
       IF psTipoAgrup = 'I' THEN
          v_varcsv := 'Incremental';
-         v_dir    := 'BACKLGRS';
+         v_dir    := 'BACKLGRS_GENERATING';
       ELSE
          v_dir := 'BACKLGRS_GENERATING';
       END IF;
@@ -92,6 +92,7 @@ BEGIN
     -- Primeiro extrai a venda aberta depois agrupada
     -- Abre o arquivo para escrita
     v_file := UTL_FILE.fopen(v_dir, 'Ext_Bklgrs_Vendas_'||v_varcsv||'.csv', 'w', 32767); 
+    v_name := 'Ext_Bklgrs_Vendas_'||v_varcsv||'.csv';
 
     -- Pega o nome das colunas para inserir no cabecalho pq tenho preguica
    SELECT 'IDUNICO;'||LISTAGG(COLUMN_NAME,';') WITHIN GROUP (ORDER BY COLUMN_ID)-- ||';DATA'
@@ -129,7 +130,7 @@ BEGIN
                   vda.VLRPRECOVENDAUNITARIO||';'||vda.VLRDESCONTOUNITARIO||';'||vda.VLRMARGEMPDV||';'||
                   vda.TXTCANALVENDAS||';'||vda.TXTFORMAPAGTO||';'||vda.NROCUPOM;
 
-        v_buffer := v_buffer || v_line || CHR(13); -- Adiciona nova linha ao buffer
+        v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer
         
         IF LENGTH(v_buffer) > v_chunk_size THEN
             UTL_FILE.put_line(v_file, v_buffer); -- Escreve o buffer no arquivo
@@ -147,6 +148,18 @@ BEGIN
     
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
+    
+    IF v_dir = 'BACKLGRS_GENERATING' AND psTipoExt != 'G' THEN
+    
+    -- Move do diretório temporário para o final
+     sys.utl_file.fcopy('BACKLGRS_GENERATING',
+                       v_name, 
+                       'BACKLGRS',
+                       v_name,1,NULL);
+     sys.utl_file.FClose(v_file); 
+     sys.utl_file.fremove('BACKLGRS_GENERATING', v_name);
+     
+    END IF;
     
     END IF;
     IF psTipoExt IN ('T','G') THEN
@@ -176,7 +189,7 @@ BEGIN
 
         v_line := vda.IDPESSOA||';'||vda.IDFILIAL||';'||vda.IDCUPOM||';'||vda.DATA_COMPLETA||';'||vda.VALORTOTAL||';'||vda.VALORDESC||';'||vda.VALORLIQ||';'||vda.TXTCANALVENDAS||';'||vda.TXTFORMAPAGTO||';'||vda.NROCHECKOUT||';'||vda.BUSINESS_UNIT||';'||vda.QTD_TOT_VENDA;
 
-        v_buffer := v_buffer || v_line || CHR(13); -- Adiciona nova linha ao buffer
+        v_buffer := v_buffer || v_line || CHR(10); -- Adiciona nova linha ao buffer
         
         IF LENGTH(v_buffer) > v_chunk_size THEN
             UTL_FILE.put_line(v_file, v_buffer); -- Escreve o buffer no arquivo
@@ -195,7 +208,7 @@ BEGIN
     -- Fecha o arquivo
     UTL_FILE.fclose(v_file);
     
-    IF v_dir = 'BACKLGRS_GENERATING' THEN
+    IF v_dir = 'BACKLGRS_GENERATING' AND psTipoExt != 'G' THEN
     
     -- Move do diretório temporário para o final
      sys.utl_file.fcopy('BACKLGRS_GENERATING',
